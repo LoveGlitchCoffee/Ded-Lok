@@ -1,0 +1,443 @@
+##########################
+#
+# Define graphics
+# Squint to see images
+#
+##########################
+
+: player_image
+	0b00011000
+	0b11111111
+
+: enemy_image
+	0b11111111
+	0b00011000
+
+: arrow_up
+	0b00010000
+	0b00010000
+	0b00010000
+	0b00010000
+	0b00111000
+
+: arrow_down
+	0b00111000
+	0b00010000
+	0b00010000
+	0b00010000
+	0b00010000
+
+: edge 0xFF 0xFF
+
+: w-head
+  0b11000000
+  0b01100000
+  0b00110011
+  0b00011011
+  0b00001100
+
+: w-tail
+  0b00000011
+  0b00000110
+  0b11001100
+  0b11011000
+  0b00110000
+
+: win-i
+  0b11111111
+  0b00011000
+  0b00011000
+  0b00011000
+  0b11111111
+
+: win-n
+  0b11000011
+  0b11100011
+  0b11110011
+  0b11011111
+  0b11001111
+
+: lose-l
+  0b11000000
+  0b11000000
+  0b11000000
+  0b11000000
+  0b11111111
+
+: lose-o
+  0b00111100
+  0b01000010
+  0b01000010
+  0b01000010
+  0b00111100
+
+: lose-s
+  0b00011111
+  0b00111000
+  0b01110000
+  0b00011100
+  0b11110000
+
+: lose-e
+  0b11111111
+  0b11000000
+  0b11111111
+  0b11000000
+  0b11111111
+
+####################################################
+#
+# assign registers aliases, like naming variables
+# use pretty much all registers, cept v0, v1 for temporary assignments
+#
+####################################################
+
+
+:alias distance v4		# distance left to move
+:alias e_fire v7		# whether enemy has fired
+:alias e_arrx v5		# enemy arrow x position
+:alias e_arry v3		# enemy arrow y position
+:alias direction v2 	# determine direction moving along x
+:alias moving v6    	# enemy state, 1 = moving, 0 = finished moving
+:alias px v8			# player x position
+:alias py v9			# player y position
+:alias ex va 			# enemy x position
+:alias ey vb			# enemy y position
+:alias arrx vc  		# arrow x position
+:alias arry vd  		# arrow y position
+:alias fire ve 			# state of player's arrow - 0 for absent, 1 for fired and moving
+:alias efire vf			# state of enemy's arrow - 0 for absent, 1 for fired and moving
+
+
+########################################
+#
+# Main method
+#
+########################################
+
+: main
+
+	clear
+
+	# draw edges
+	i := edge
+	v0 := 0
+	v1 := 31
+	loop
+		sprite v0 v1 2
+		v0 += 8
+		if v0 != 64 then
+	again
+
+	
+	# set enemy and player positions
+	px := 12
+	py := 29
+	ex := 12
+	ey := 1
+
+	# draw enemy and player
+	i := player_image
+	sprite px py 2
+	i := enemy_image
+	sprite ex ey 2
+
+	# game logic
+	distance := 0
+	direction := 0
+	arry := 0xFF
+	e_arry := 0xFF
+	arrx := 0
+	e_arrx := 0
+	fire := 0
+	e_fire := 0
+	
+	
+	# main game loop
+
+	loop
+		player_movement
+		fire_arrow
+		move_arrow
+		move_enemy
+		move_enemy_arrow
+	again
+
+
+##################################################
+#
+# Delay 32 frames before showing win/lose message
+#
+##################################################
+
+: gameover
+		
+    v0 := 32
+	buzzer := v0
+	delay  := v0
+	loop
+		v0 := delay
+		if v0 != 0 then
+	again
+;	
+
+
+: win
+
+  gameover
+  draw_win
+
+  v1 := 6
+  
+  loop
+	if v1 key then jump main
+  again
+  
+
+: lose
+
+  gameover
+  draw_lose
+
+  v1 := 6
+
+  loop
+	if v1 key then jump main
+  again
+
+
+: draw_win
+
+  v1 := 16
+  v2 := 16
+  
+  i := w-head
+  sprite v1 v2 5
+  
+  v1 += 8
+  i := w-tail
+  sprite v1 v2 5
+
+  v1 += 9
+  i := win-i
+  sprite v1 v2 5
+
+  v1 += 9
+  i := win-n
+  sprite v1 v2 5
+
+;
+
+: draw_lose
+
+  v1 := 16
+  v2 := 16
+
+  i := lose-l
+  sprite v1 v2 5
+
+  v1 += 9
+  i := lose-o
+  sprite v1 v2 5
+
+  v1 += 9
+  i := lose-s
+  sprite v1 v2 5
+
+  v1 += 9
+  i := lose-e
+  sprite v1 v2 5
+
+;
+
+
+##################################################
+#
+# Detects player enter key and erase + redraw sprite
+#
+###################################################
+
+
+: player_movement
+
+	v1 := px
+
+	v0 := 7
+	if v0 key then v1 += -1
+	v0 := 9
+	if v0 key then v1 += 1
+
+	i := player_image
+	sprite px py 2
+	px := v1
+	if px == 0 then px := 1
+	if px == 56 then px := 55
+	sprite px py 2
+	
+;
+
+
+############################################################
+#
+# if register alias fire set to 1, know already fire so return
+#
+############################################################
+
+: fire_arrow
+
+	if fire == 1 then return
+
+	v0 := 5
+	if v0 -key then return
+
+	fire := 1
+
+	arrx := px
+	arry := py
+	arry += -5
+
+	i := arrow_up
+	sprite arrx arry 5
+;
+
+############################################################
+#
+# checks for collision and resets value of arrow (no persists)
+# else just moves arrow (erase + redraw)
+#
+############################################################
+
+: move_arrow
+
+  if arry == 0 begin
+  	fire := 0
+	v1 := ex
+	v0 := v1
+  	v0 += 7
+	arrx += 4
+  	loop
+		if arrx == v1 then jump win
+		v1 += 1
+		if v1 != v0 then
+  	again
+	arrx := 0
+	arry := 0xFF
+  end
+  
+  if fire == 0 then return
+
+  i := arrow_up
+  sprite arrx arry 5
+  arry += -1
+  sprite arrx arry 5
+
+;
+
+
+: move_enemy
+	
+	v0 := 0
+
+	v1 := ex
+	if direction == 1 then v1 += 1
+	if direction == 0 then v1 += -1
+
+	i := enemy_image
+	sprite ex ey 2	
+	ex := v1
+	sprite ex ey 2
+	distance += -1
+
+	if ex == 1 then direction := 1
+	if ex == 56 then direction := 0
+
+
+	if distance == 0 then moving := 0
+
+	if moving == 1 then return
+
+	if direction == 0 begin
+		direction := 1
+	else
+		direction := 0
+	end
+	
+	enemy_fire
+	determine_movement
+	moving := 1
+;
+
+: enemy_fire
+
+  if e_fire == 1 then return
+
+  e_fire := 1
+
+  e_arrx := ex
+  e_arry := ey
+  e_arry += 5
+
+  i := arrow_down
+  sprite e_arrx e_arry 5
+  
+;
+
+: move_enemy_arrow
+
+  if e_arry == 27 begin
+  	e_fire := 0
+	v1 := px
+	v0 := v1
+  	v0 += 7
+	e_arrx += 4
+  	loop
+		if e_arrx == v1 then jump lose
+		v1 += 1
+		if v1 != v0 then
+  	again
+	e_arrx := 0
+	e_arry := 0xFF
+  end
+  
+  if e_fire == 0 then return
+
+
+  i := arrow_down
+  sprite e_arrx e_arry 5
+  e_arry += 1
+  sprite e_arrx e_arry 5
+
+;
+
+
+#########################################################################################
+#
+# assign register v0 a number, mark random
+# jump0 is push the random distance table into v0
+# random flag then randomly selects (?) an instruction from table within multiple of v0
+#
+#########################################################################################
+
+: determine_movement
+
+  v0 := random 0b11100
+  jump0 distance_table
+;
+
+##############################
+#
+# distance move by
+#
+##############################
+
+: distance_table
+
+  distance := 16	return
+  distance := 32	return
+  distance := 16	return
+  distance := 32	return
+  distance := 16	return
+  distance := 32	return
+  distance := 30	return
+  distance := 16	return
+  
